@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wykreślanka</title>
+<title>made by piotrek &lt;3</title>
 
 <style>
 :root{
@@ -25,7 +25,7 @@ button.secondary{background:#777}
 button.hidden{display:none}
 button:disabled{opacity:0.5;cursor:not-allowed}
 
-.board{display:grid;gap:6px;justify-content:center;min-height:200px;touch-action:none}
+.board{display:grid;gap:6px;justify-content:center;min-height:200px}
 .cell{
   width:var(--tile);height:var(--tile);
   display:flex;align-items:center;justify-content:center;
@@ -33,7 +33,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
   background:var(--cell);user-select:none;
   transition:.2s;
   opacity:0;
-  -webkit-tap-highlight-color:transparent;
 }
 .cell.sel{background:var(--cell-sel)}
 .cell.found{background:var(--cell-found)}
@@ -115,28 +114,12 @@ button:disabled{opacity:0.5;cursor:not-allowed}
   100% { background-position: 0% 50%; }
 }
 
-/* Mobile optimizations */
-@media(max-width:900px){
-  .layout{grid-template-columns:1fr}
-  :root{--tile:38px}
-  body{padding:12px}
-  .card{padding:12px}
-  h1{font-size:1.5rem}
-  .controls{flex-direction:column}
-  button,input,select{width:100%;box-sizing:border-box}
-  .cell{font-size:0.9rem}
-}
-
-@media(max-width:480px){
-  :root{--tile:34px}
-  .cell{font-size:0.8rem}
-  h3{font-size:1rem}
-}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
 </style>
 </head>
 
 <body>
-<h1>🧩 Wykreślanka</h1>
+<h1>spoko giera</h1>
 
 <div class="card controls">
   <input id="nick" placeholder="Twój nick">
@@ -216,8 +199,9 @@ let giveupCooldown = 0;
 let cooldownInterval = null;
 let gameStartTime = 0;
 let gameCooldownActive = false;
-let lastTouchCell = null;
+let isOnline = true; // Flaga czy jest połączenie z internetem
 
+// =============== INICJALIZACJA ===============
 // Inicjalizacja lokalnych statystyk
 if(!localStorage.getItem('giveupStats')) {
   const initialStats = {};
@@ -237,8 +221,14 @@ themeBtn.onclick=()=>{
 startBtn.onclick=startGame;
 levelEl.onchange=renderScores;
 
+// =============== GŁÓWNE FUNKCJE GRY ===============
 function startGame() {
-  if(!nickInput.value.trim()){alert("Podaj nick");return;}
+  if(!nickInput.value.trim()){
+    alert("Podaj nick");
+    return;
+  }
+  
+  // NIE blokuj przycisku - to powoduje zawieszanie!
   
   if(gameCooldownActive) {
     const timeLeft = 5 - Math.floor((Date.now() - gameStartTime) / 1000);
@@ -374,43 +364,14 @@ function draw(){
       cell.dataset.r=r;
       cell.dataset.c=c;
       
-      // Obsługa dotyku na urządzeniach mobilnych
-      cell.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        startSel(cell);
-      }, { passive: false });
-      
-      cell.addEventListener('mousedown', () => startSel(cell));
+      cell.onpointerdown=()=>startSel(cell);
+      cell.onpointerenter=()=>moveSel(cell);
       
       boardEl.appendChild(cell);
     }
   }
   
-  // Globalne nasłuchiwanie dla przeciągania
-  boardEl.addEventListener('touchmove', handleTouchMove, { passive: false });
-  boardEl.addEventListener('mousemove', handleMouseMove);
-  
-  document.addEventListener('touchend', endSel);
-  document.addEventListener('mouseup', endSel);
-}
-
-function handleTouchMove(e) {
-  if(!selecting || !gameActive) return;
-  e.preventDefault();
-  
-  const touch = e.touches[0];
-  const element = document.elementFromPoint(touch.clientX, touch.clientY);
-  if(element && element.classList.contains('cell')) {
-    moveSel(element);
-  }
-}
-
-function handleMouseMove(e) {
-  if(!selecting || !gameActive) return;
-  const element = document.elementFromPoint(e.clientX, e.clientY);
-  if(element && element.classList.contains('cell')) {
-    moveSel(element);
-  }
+  document.onpointerup=endSel;
 }
 
 function startSel(cell){
@@ -419,12 +380,11 @@ function startSel(cell){
   path=[cell];
   currentDirection=null;
   cell.classList.add('sel');
-  lastTouchCell = cell;
 }
 
 function moveSel(cell){
   if(!selecting || !gameActive || cell.classList.contains('found')) return;
-  if(path.includes(cell) || cell === lastTouchCell) return;
+  if(path.includes(cell)) return;
   
   const last=path[path.length-1];
   const dr=+cell.dataset.r - +last.dataset.r;
@@ -455,13 +415,11 @@ function moveSel(cell){
   
   path.push(cell);
   cell.classList.add('sel');
-  lastTouchCell = cell;
 }
 
 function endSel(){
   if(!selecting || !gameActive) return;
   selecting=false;
-  lastTouchCell = null;
   
   const selectedWord=path.map(cell=>cell.textContent).join('');
   const reversedWord=[...selectedWord].reverse().join('');
@@ -473,14 +431,7 @@ function endSel(){
     });
     finish();
   }else{
-    // Animacja błędu
-    path.forEach(cell=>{
-      cell.classList.remove('sel');
-      cell.style.backgroundColor = '#ff6b6b';
-      setTimeout(() => {
-        cell.style.backgroundColor = '';
-      }, 300);
-    });
+    path.forEach(cell=>cell.classList.remove('sel'));
   }
   
   path=[];
@@ -492,7 +443,11 @@ function finish(){
   const time=((Date.now()-startTime)/1000).toFixed(2);
   statusEl.textContent=`Gratulacje! Znaleziono słowo w ${time}s`;
   
-  addScore(nickInput.value.trim(), time);
+  // Dodaj wynik lokalnie (SYNCHRONICZNIE)
+  addScoreLocal(nickInput.value.trim(), time);
+  
+  // Spróbuj wysłać do serwera (ASYNCHRONICZNIE)
+  sendScoreToServer(nickInput.value.trim(), time);
   
   gameCooldownActive = true;
   gameStartTime = Date.now();
@@ -506,87 +461,114 @@ function finish(){
   }
 }
 
-// =============== ZMODYFIKOWANA FUNKCJA PODDAWANIA SIĘ ===============
-giveupBtn.onclick=async function(){
-  if(giveupCooldown > 0) return;
+// =============== PROSTE FUNKCJE DLA JSONBIN ===============
+// Funkcja do wysyłania wyników (NIE BLOKUJĄCA)
+function sendScoreToServer(nick, time) {
+  if (!isOnline) return; // Jeśli offline, nie próbuj
   
-  gameActive=false;
-  
-  // Zaktualizuj lokalne statystyki
-  const giveupStats = JSON.parse(localStorage.getItem('giveupStats'));
-  giveupStats[target] = (giveupStats[target] || 0) + 1;
-  localStorage.setItem('giveupStats', JSON.stringify(giveupStats));
-  
-  // WYŚLIJ DO GLOBALNEGO RANKINGU PODDAŃ
-  try {
-    // 1. Pobierz aktualne statystyki
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY,
-        'Content-Type': 'application/json'
+  // Użyj setTimeout aby nie blokować UI
+  setTimeout(async () => {
+    try {
+      const currentSize = size;
+      const normalizedNick = nick.toLowerCase().trim();
+      
+      // 1. Pobierz aktualne wyniki
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+        headers: {
+          'X-Master-Key': JSONBIN_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        isOnline = false;
+        return;
       }
-    });
-    
-    if (!response.ok) throw new Error('Błąd pobierania statystyk');
-    
-    const data = await response.json();
-    const globalStats = data.record || {};
-    
-    // 2. Zwiększ licznik dla danego słowa
-    if (!globalStats[target]) {
-      globalStats[target] = 1;
-    } else {
-      globalStats[target] += 1;
+      
+      const data = await response.json();
+      const allScores = data.record || { "7": [], "12": [], "15": [] };
+      
+      // 2. Dodaj nowy wynik
+      if (!allScores[currentSize]) {
+        allScores[currentSize] = [];
+      }
+      
+      allScores[currentSize] = allScores[currentSize].filter(
+        score => score.nick.toLowerCase().trim() !== normalizedNick
+      );
+      
+      allScores[currentSize].push({
+        nick: nick.trim(),
+        time: +time,
+        date: new Date().toISOString()
+      });
+      
+      allScores[currentSize].sort((a, b) => a.time - b.time);
+      allScores[currentSize] = allScores[currentSize].slice(0, 10);
+      
+      // 3. Wyślij z powrotem
+      await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'X-Master-Key': JSONBIN_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(allScores)
+      });
+      
+      isOnline = true;
+    } catch (error) {
+      isOnline = false;
+      // Cicho ignoruj błąd - nie blokuj gry
     }
-    
-    // 3. Wyślij zaktualizowane statystyki
-    const updateResponse = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(globalStats)
-    });
-    
-    if (!updateResponse.ok) throw new Error('Błąd aktualizacji statystyk');
-    
-    console.log('✅ Statystyka poddania wysłana na serwer');
-    
-  } catch (error) {
-    console.error('❌ Błąd synchronizacji statystyk:', error);
-  }
-  
-  // Odśwież wyświetlanie najtrudniejszego słowa
-  updateHardestWordDisplay();
-  
-  const cells=[...boardEl.children];
-  solution.forEach(([r,c], index)=>{
-    setTimeout(()=>{
-      const cell=cells.find(e=>+e.dataset.r===r&&+e.dataset.c===c);
-      if(cell){
-        cell.classList.remove('sel');
-        cell.classList.add('found','pulse');
-      }
-    }, index*100);
-  });
-  
-  statusEl.textContent=`Słowo to: ${target}`;
-  
-  gameCooldownActive = true;
-  gameStartTime = Date.now();
-  
-  startBtn.classList.remove('hidden');
-  giveupBtn.classList.add('hidden');
-  
-  if(cooldownInterval) {
-    clearInterval(cooldownInterval);
-    cooldownInterval = null;
-  }
-};
+  }, 0); // setTimeout 0 = asynchronicznie, po zakończeniu bieżącego taska
+}
 
-// =============== ZMODYFIKOWANA FUNKCJA DODAWANIA WYNIKU ===============
-async function addScore(nick, time){
+// Funkcja do wysyłania statystyk poddań
+function sendGiveupStatToServer(targetWord) {
+  if (!isOnline) return;
+  
+  setTimeout(async () => {
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}/latest`, {
+        headers: {
+          'X-Master-Key': JSONBIN_API_KEY,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        isOnline = false;
+        return;
+      }
+      
+      const data = await response.json();
+      const globalStats = data.record || {};
+      
+      if (!globalStats[targetWord]) {
+        globalStats[targetWord] = 1;
+      } else {
+        globalStats[targetWord] += 1;
+      }
+      
+      await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'X-Master-Key': JSONBIN_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(globalStats)
+      });
+      
+      isOnline = true;
+    } catch (error) {
+      isOnline = false;
+    }
+  }, 0);
+}
+
+// =============== LOKALNE FUNKCJE (NIGDY NIE ZAWIESZAJĄ) ===============
+function addScoreLocal(nick, time){
   const currentSize = size;
   const key = 'scores_' + currentSize;
   let scores = JSON.parse(localStorage.getItem(key) || '[]');
@@ -606,60 +588,6 @@ async function addScore(nick, time){
   scores.sort((a,b) => a.time - b.time);
   const topScores = scores.slice(0,10);
   localStorage.setItem(key, JSON.stringify(topScores));
-  
-  // WYŚLIJ WYNIK DO JSONBIN.IO (RANKING CZASÓW)
-  try {
-    // 1. Pobierz aktualny bin
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!response.ok) throw new Error('Błąd pobierania danych z serwera');
-    
-    const data = await response.json();
-    const allScores = data.record || { "7": [], "12": [], "15": [] };
-    
-    // 2. Dodaj nowy wynik do odpowiedniej kategorii
-    if (!allScores[currentSize]) {
-      allScores[currentSize] = [];
-    }
-    
-    // Usuń stary wynik tego samego użytkownika
-    allScores[currentSize] = allScores[currentSize].filter(
-      score => score.nick.toLowerCase().trim() !== normalizedNick
-    );
-    
-    allScores[currentSize].push({
-      nick: nick.trim(),
-      time: +time,
-      date: new Date().toISOString()
-    });
-    
-    // 3. Posortuj i ogranicz do 10 wyników
-    allScores[currentSize].sort((a, b) => a.time - b.time);
-    allScores[currentSize] = allScores[currentSize].slice(0, 10);
-    
-    // 4. Wyślij zaktualizowany bin
-    const updateResponse = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(allScores)
-    });
-    
-    if (!updateResponse.ok) throw new Error('Błąd aktualizacji danych');
-    
-    console.log('✅ Wynik zsynchronizowany z serwerem');
-    
-  } catch (error) {
-    console.error('❌ Błąd synchronizacji z JSONBin.io:', error);
-    statusEl.innerHTML += '<br><small style="color:#ff6b6b">(Brak połączenia z serwerem - wynik tylko lokalny)</small>';
-  }
   
   renderScores();
   
@@ -698,176 +626,209 @@ function celebrateRecord(nick, time) {
   }, 3000);
 }
 
-// =============== ZMODYFIKOWANA FUNKCJA NAJTRUDNIEJSZEGO SŁOWA ===============
-async function updateHardestWordDisplay() {
-  try {
-    // SPRÓBUJ POBRAĆ Z SERWERA (GLOBALNE DANE)
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY
+// =============== FUNKCJA PODDAWANIA SIĘ ===============
+giveupBtn.onclick=function(){
+  if(giveupCooldown > 0) return;
+  
+  gameActive=false;
+  
+  // 1. Zaktualizuj lokalne statystyki (SYNCHRONICZNIE)
+  const giveupStats = JSON.parse(localStorage.getItem('giveupStats'));
+  giveupStats[target] = (giveupStats[target] || 0) + 1;
+  localStorage.setItem('giveupStats', JSON.stringify(giveupStats));
+  
+  // 2. Wyślij do serwera (ASYNCHRONICZNIE - nie blokuje)
+  sendGiveupStatToServer(target);
+  
+  // 3. Natychmiastowa aktualizacja UI
+  updateHardestWordDisplay();
+  
+  const cells=[...boardEl.children];
+  solution.forEach(([r,c], index)=>{
+    setTimeout(()=>{
+      const cell=cells.find(e=>+e.dataset.r===r&&+e.dataset.c===c);
+      if(cell){
+        cell.classList.remove('sel');
+        cell.classList.add('found','pulse');
       }
-    });
-    
-    if (!response.ok) throw new Error('Błąd serwera');
-    
-    const data = await response.json();
-    const globalStats = data.record || {};
-    
-    // Znajdź słowo z największą liczbą poddań
+    }, index*100);
+  });
+  
+  statusEl.textContent=`Słowo to: ${target}`;
+  
+  gameCooldownActive = true;
+  gameStartTime = Date.now();
+  
+  startBtn.classList.remove('hidden');
+  giveupBtn.classList.add('hidden');
+  
+  if(cooldownInterval) {
+    clearInterval(cooldownInterval);
+    cooldownInterval = null;
+  }
+};
+
+// =============== FUNKCJE WYŚWIETLANIA ===============
+async function updateHardestWordDisplay() {
+  // Najpierw pokaż lokalne dane (natychmiast)
+  const giveupStats = JSON.parse(localStorage.getItem('giveupStats'));
+  const statsArray = Object.entries(giveupStats);
+  
+  if(statsArray.length > 0) {
     let hardestWord = '';
     let maxCount = 0;
     
-    Object.entries(globalStats).forEach(([word, count]) => {
-      if (count > maxCount) {
+    statsArray.forEach(([word, count]) => {
+      if(count > maxCount) {
         maxCount = count;
         hardestWord = word;
       }
     });
     
-    if (hardestWord && maxCount > 0) {
+    if(hardestWord && maxCount > 0) {
       hardestWordDisplay.innerHTML = `
         <div style="text-align: center;">
           <div style="font-size: 1.3rem; color: #ff6b6b;">${hardestWord}</div>
           <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
-            Globalnych poddań: ${maxCount}
+            Lokalnych poddań: ${maxCount}
           </div>
           <div style="font-size: 0.7rem; color: #888; margin-top: 3px;">
-            🟢 Dane globalne
+            ⚠️ Tylko dane lokalne
           </div>
         </div>
       `;
-    } else {
-      hardestWordDisplay.innerHTML = '<div style="color: #666; font-style: italic;">Brak globalnych danych</div>';
     }
-    
-  } catch (error) {
-    console.error('Błąd pobierania statystyk:', error);
-    
-    // FALLBACK: użyj lokalnych statystyk
-    const giveupStats = JSON.parse(localStorage.getItem('giveupStats'));
-    const statsArray = Object.entries(giveupStats);
-    
-    if(statsArray.length > 0) {
-      let hardestWord = '';
-      let maxCount = 0;
-      
-      statsArray.forEach(([word, count]) => {
-        if(count > maxCount) {
-          maxCount = count;
-          hardestWord = word;
+  }
+  
+  // Potem spróbuj pobrać globalne dane (asynchronicznie)
+  if (isOnline) {
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_STATS_BIN_ID}/latest`, {
+          headers: {
+            'X-Master-Key': JSONBIN_API_KEY
+          }
+        });
+        
+        if (!response.ok) {
+          isOnline = false;
+          return;
         }
-      });
-      
-      if(hardestWord && maxCount > 0) {
-        hardestWordDisplay.innerHTML = `
-          <div style="text-align: center;">
-            <div style="font-size: 1.3rem; color: #ff6b6b;">${hardestWord}</div>
-            <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
-              Lokalnych poddań: ${maxCount}
+        
+        const data = await response.json();
+        const globalStats = data.record || {};
+        
+        let hardestWord = '';
+        let maxCount = 0;
+        
+        Object.entries(globalStats).forEach(([word, count]) => {
+          if (count > maxCount) {
+            maxCount = count;
+            hardestWord = word;
+          }
+        });
+        
+        if (hardestWord && maxCount > 0) {
+          hardestWordDisplay.innerHTML = `
+            <div style="text-align: center;">
+              <div style="font-size: 1.3rem; color: #ff6b6b;">${hardestWord}</div>
+              <div style="font-size: 0.9rem; color: #666; margin-top: 5px;">
+                Globalnych poddań: ${maxCount}
+              </div>
+              <div style="font-size: 0.7rem; color: #888; margin-top: 3px;">
+                🟢 Dane globalne
+              </div>
             </div>
-            <div style="font-size: 0.7rem; color: #888; margin-top: 3px;">
-              ⚠️ Tylko dane lokalne
-            </div>
-          </div>
-        `;
-      } else {
-        hardestWordDisplay.innerHTML = '<div style="color: #666; font-style: italic;">Brak danych</div>';
+          `;
+        }
+        
+        isOnline = true;
+      } catch (error) {
+        isOnline = false;
       }
-    } else {
-      hardestWordDisplay.innerHTML = '<div style="color: #666; font-style: italic;">Brak danych</div>';
-    }
+    }, 0);
   }
 }
 
-// =============== ZMODYFIKOWANA FUNKCJA RENDEROWANIA WYNIKÓW ===============
 async function renderScores(){
   const selectedSize = levelEl.value;
   lvlLabel.textContent = selectedSize + "×" + selectedSize;
   
   scoresEl.innerHTML = '<tr><th>Nick</th><th>Czas (s)</th></tr>';
   
-  try {
-    // SPRÓBUJ POBRAĆ Z SERWERA
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': JSONBIN_API_KEY
-      }
+  // Najpierw pokaż lokalne wyniki (natychmiast)
+  const key = 'scores_' + selectedSize;
+  const localScores = JSON.parse(localStorage.getItem(key) || '[]');
+  
+  if(localScores.length === 0){
+    scoresEl.innerHTML += '<tr><td colspan="2" style="text-align:center;padding:10px;">Brak wyników</td></tr>';
+  } else {
+    localScores.forEach(score => {
+      scoresEl.innerHTML += `
+        <tr>
+          <td>${score.nick}</td>
+          <td>${score.time}</td>
+        </tr>
+      `;
     });
-    
-    if (!response.ok) throw new Error('Błąd serwera');
-    
-    const data = await response.json();
-    const serverScores = data.record[selectedSize] || [];
-    
-    // Pobierz lokalne wyniki
-    const key = 'scores_' + selectedSize;
-    const localScores = JSON.parse(localStorage.getItem(key) || '[]');
-    
-    // Połącz wyniki
-    let allScores = [...serverScores, ...localScores];
-    
-    // Usuń duplikaty
-    const uniqueScores = [];
-    const seen = new Set();
-    
-    allScores.forEach(score => {
-      const scoreKey = score.nick.toLowerCase() + '-' + score.time;
-      if (!seen.has(scoreKey)) {
-        seen.add(scoreKey);
-        uniqueScores.push(score);
+  }
+  
+  // Potem spróbuj pobrać globalne (asynchronicznie)
+  if (isOnline) {
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`, {
+          headers: {
+            'X-Master-Key': JSONBIN_API_KEY
+          }
+        });
+        
+        if (!response.ok) {
+          isOnline = false;
+          return;
+        }
+        
+        const data = await response.json();
+        const serverScores = data.record[selectedSize] || [];
+        
+        if (serverScores.length > 0) {
+          scoresEl.innerHTML = '<tr><th>Nick</th><th>Czas (s)</th></tr>';
+          
+          const allScores = [...serverScores, ...localScores];
+          const uniqueScores = [];
+          const seen = new Set();
+          
+          allScores.forEach(score => {
+            const scoreKey = score.nick.toLowerCase() + '-' + score.time;
+            if (!seen.has(scoreKey)) {
+              seen.add(scoreKey);
+              uniqueScores.push(score);
+            }
+          });
+          
+          uniqueScores.sort((a, b) => a.time - b.time);
+          
+          uniqueScores.slice(0, 10).forEach(score => {
+            scoresEl.innerHTML += `
+              <tr>
+                <td>${score.nick}</td>
+                <td>${score.time.toFixed(2)}</td>
+              </tr>
+            `;
+          });
+          
+          const infoRow = document.createElement('tr');
+          infoRow.innerHTML = `<td colspan="2" style="text-align:center;font-size:0.8em;color:#777;padding-top:10px;">
+            🟢 Ranking globalny
+          </td>`;
+          scoresEl.appendChild(infoRow);
+        }
+        
+        isOnline = true;
+      } catch (error) {
+        isOnline = false;
       }
-    });
-    
-    // Posortuj
-    uniqueScores.sort((a, b) => a.time - b.time);
-    
-    // Wyświetl top 10
-    if (uniqueScores.length === 0) {
-      scoresEl.innerHTML += '<tr><td colspan="2" style="text-align:center;padding:10px;">Brak wyników</td></tr>';
-    } else {
-      uniqueScores.slice(0, 10).forEach(score => {
-        scoresEl.innerHTML += `
-          <tr>
-            <td>${score.nick}</td>
-            <td>${score.time.toFixed(2)}</td>
-          </tr>
-        `;
-      });
-      
-      // Dodaj informację o źródle
-      const infoRow = document.createElement('tr');
-      infoRow.innerHTML = `<td colspan="2" style="text-align:center;font-size:0.8em;color:#777;padding-top:10px;">
-        🟢 Ranking globalny
-      </td>`;
-      scoresEl.appendChild(infoRow);
-    }
-    
-  } catch (error) {
-    console.error('Błąd pobierania rankingów:', error);
-    
-    // FALLBACK: użyj tylko lokalnych wyników
-    const key = 'scores_' + selectedSize;
-    const scores = JSON.parse(localStorage.getItem(key) || '[]');
-    
-    if(scores.length === 0){
-      scoresEl.innerHTML += '<tr><td colspan="2" style="text-align:center;padding:10px;">Brak wyników</td></tr>';
-    } else {
-      scores.forEach(score => {
-        scoresEl.innerHTML += `
-          <tr>
-            <td>${score.nick}</td>
-            <td>${score.time}</td>
-          </tr>
-        `;
-      });
-      
-      // Dodaj informację
-      const infoRow = document.createElement('tr');
-      infoRow.innerHTML = `<td colspan="2" style="text-align:center;font-size:0.8em;color:#777;padding-top:10px;">
-        ⚠️ Tylko ranking lokalny
-      </td>`;
-      scoresEl.appendChild(infoRow);
-    }
+    }, 0);
   }
 }
 
